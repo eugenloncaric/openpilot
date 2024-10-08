@@ -89,12 +89,9 @@ class ModelState:
       input_img_cl = cl_from_visionbuf(buf)
       cl_buf_desc_ptr = to_mv(input_img_cl.mem_address, 8).cast('Q')[0]
       rawbuf_ptr = to_mv(cl_buf_desc_ptr, 0x100).cast('Q')[20] # offset 0xA0 is a raw gpu pointer.
-      tensor_inputs['input_img'] = Tensor.from_blob(rawbuf_ptr, (buf.height, buf.width), dtype=dtypes.uint8, device='QCOM')[v_offset:v_offset+MODEL_HEIGHT, h_offset:h_offset+MODEL_WIDTH].reshape((1,-1)).contiguous().realize()
+      tensor_inputs['input_img'] = Tensor.from_blob(rawbuf_ptr, (1, buf.height, buf.width), dtype=dtypes.uint8, device='QCOM')
     else:
-      buf_data = buf.data.reshape(-1, buf.stride)
-      input_data = self.inputs['input_img'].reshape(1, MODEL_HEIGHT, MODEL_WIDTH)
-      input_data[:] = buf_data[v_offset:v_offset+MODEL_HEIGHT, h_offset:h_offset+MODEL_WIDTH]
-      tensor_inputs['input_img'] = Tensor(input_data).reshape((1,-1))
+      tensor_inputs['input_img'] = Tensor(buf.data).reshape((1,buf.height * 3 // 2,buf.width))
 
     t2 = time.time()
     output = self.model_run(**tensor_inputs)['outputs'].numpy().flatten()
