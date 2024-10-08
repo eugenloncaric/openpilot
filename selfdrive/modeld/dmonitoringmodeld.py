@@ -81,7 +81,7 @@ class ModelState:
   def run(self, buf:VisionBuf, calib:np.ndarray) -> tuple[np.ndarray, float]:
     self.inputs['calib'][0,:] = calib
 
-    t1 = time.time()
+    t1 = time.perf_counter()
     tensor_inputs = {'calib': Tensor(self.inputs['calib'])}
     v_offset = buf.height - MODEL_HEIGHT
     h_offset = (buf.width - MODEL_WIDTH) // 2
@@ -93,11 +93,11 @@ class ModelState:
     else:
       tensor_inputs['input_img'] = Tensor(buf.data).reshape((1,buf.height * 3 // 2,buf.width))
 
-    t2 = time.time()
+    t2 = time.perf_counter()
     output = self.model_run(**tensor_inputs)['outputs'].numpy().flatten()
 
-    t3 = time.time()
-    print(f'dmodeld: input cast: {(t2 - t1) * 1000}ms, model_run: {(t3 - t2) * 1000}ms ')
+    t3 = time.perf_counter()
+    print(f'DMONITORMODELD TIMINGS: input to tensor cast: {(t2 - t1) * 1000:.2f}ms, model_run: {(t3 - t2) * 1000:.2}ms ')
     return output, t3 - t1
 
 

@@ -112,7 +112,7 @@ class ModelState:
     input_imgs_cl = self.frame.prepare(buf, transform.flatten())
     big_input_imgs_cl = self.wide_frame.prepare(wbuf, transform_wide.flatten())
 
-    t0 = time.time()
+    t0 = time.perf_counter()
     tensor_inputs = {k: Tensor(v) for k, v in self.inputs.items()}
     if TICI:
       cl_buf_desc_ptr = to_mv(input_imgs_cl.mem_address, 8).cast('Q')[0]
@@ -128,12 +128,12 @@ class ModelState:
     if prepare_only:
       return None
 
-    t1 = time.time()
+    t1 = time.perf_counter()
     self.output = self.model_run(**tensor_inputs)['outputs'].numpy().flatten()
-    t2 = time.time()
+    t2 = time.perf_counter()
     outputs = self.parser.parse_outputs(self.slice_outputs(self.output))
-    t3 = time.time()
-    print(f'input cast modeld: {(t1 - t0) * 1000}ms, model_run: {(t2 - t1) * 1000}ms, output parse: {(t3 - t2) * 1000}')
+    t3 = time.perf_counter()
+    print(f'MODELD TIMINGS:  cast input to tensor: {(t1 - t0) * 1000:.2f}ms, model_run: {(t2 - t1) * 1000:.2f}ms, output parse: {(t3 - t2) * 1000:.2f}')
 
     self.full_features_20Hz[:-1] = self.full_features_20Hz[1:]
     self.full_features_20Hz[-1] = outputs['hidden_state'][0, :]
