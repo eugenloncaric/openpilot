@@ -57,6 +57,9 @@ if arch == 'larch64':
   device_string = 'QCOM=1'
 else:
   device_string = 'GPU=1'
-fn = File("models/supercombo").abspath
-cmd = f'{pythonpath_string} {device_string} python3 {Dir("#tinygrad_repo").abspath}/examples/openpilot/compile3.py {fn}.onnx && mv /tmp/openpilot.pkl {fn}_tinygrad.pkl'
-lenv.Command(fn + "_tinygrad.pkl", [fn + ".onnx"] + tinygrad_files, cmd)
+
+for model_name in ['supercombo', 'dmonitoring_model']:
+  fn = File(f"models/{model_name}").abspath
+  cmd = f'{pythonpath_string} {device_string} python3 {Dir("#tinygrad_repo").abspath}/examples/openpilot/compile3.py {fn}.onnx && mv /tmp/openpilot.pkl {fn}_tinygrad.pkl'
+  lenv.Command(fn + "_tinygrad.pkl", [fn + ".onnx"] + tinygrad_files, cmd)
+
