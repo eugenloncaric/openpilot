@@ -109,12 +109,11 @@ class ModelState:
 
     self.inputs['traffic_convention'][:] = inputs['traffic_convention']
     self.inputs['lateral_control_params'][:] = inputs['lateral_control_params']
-    tensor_inputs = {k: Tensor(v) for k, v in self.inputs.items()}
-
-
-
     input_imgs_cl = self.frame.prepare(buf, transform.flatten())
     big_input_imgs_cl = self.wide_frame.prepare(wbuf, transform_wide.flatten())
+
+    t0 = time.time()
+    tensor_inputs = {k: Tensor(v) for k, v in self.inputs.items()}
     if TICI:
       cl_buf_desc_ptr = to_mv(input_imgs_cl.mem_address, 8).cast('Q')[0]
       rawbuf_ptr = to_mv(cl_buf_desc_ptr, 0x100).cast('Q')[20] # offset 0xA0 is a raw gpu pointer.
@@ -129,8 +128,12 @@ class ModelState:
     if prepare_only:
       return None
 
+    t1 = time.time()
     self.output = self.model_run(**tensor_inputs)['outputs'].numpy().flatten()
+    t2 = time.time()
     outputs = self.parser.parse_outputs(self.slice_outputs(self.output))
+    t3 = time.time()
+    print(f'input cast modeld: {(t1 - t0) * 1000}ms, model_run: {(t2 - t1) * 1000}ms, output parse: {(t3 - t2) * 1000}')
 
     self.full_features_20Hz[:-1] = self.full_features_20Hz[1:]
     self.full_features_20Hz[-1] = outputs['hidden_state'][0, :]
@@ -202,11 +205,6 @@ def main(demo=False):
   meta_main = FrameMeta()
   meta_extra = FrameMeta()
 
-  if demo:
-    CP = convert_to_capnp(get_demo_car_params())
-  else:
-    CP = messaging.log_from_bytes(params.get("CarParams", block=True), car.CarParams)
-  cloudlog.info("modeld got CarParams: %s", CP.carName)
 
   # TODO just for testing, must remove
   CP = convert_to_capnp(get_demo_car_params())

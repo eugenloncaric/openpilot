@@ -25,6 +25,8 @@ from openpilot.selfdrive.modeld.runners import ModelRunner, Runtime
 from openpilot.selfdrive.modeld.models.commonmodel_pyx import CLContext, cl_from_visionbuf
 from openpilot.selfdrive.modeld.parse_model_outputs import sigmoid
 from tinygrad.tensor import Tensor
+from tinygrad.helpers import getenv, to_mv, mv_address
+from tinygrad.dtype import dtypes
 
 CALIB_LEN = 3
 MODEL_WIDTH = 1440
@@ -79,24 +81,27 @@ class ModelState:
   def run(self, buf:VisionBuf, calib:np.ndarray) -> tuple[np.ndarray, float]:
     self.inputs['calib'][0,:] = calib
 
-    t1 = time.perf_counter()
+    t1 = time.time()
     tensor_inputs = {'calib': Tensor(self.inputs['calib'])}
     v_offset = buf.height - MODEL_HEIGHT
     h_offset = (buf.width - MODEL_WIDTH) // 2
     if TICI:
       input_img_cl = cl_from_visionbuf(buf)
-      cl_buf_desc_ptr = to_mv(big_input_imgs_cl.mem_address, 8).cast('Q')[0]
+      cl_buf_desc_ptr = to_mv(input_img_cl.mem_address, 8).cast('Q')[0]
       rawbuf_ptr = to_mv(cl_buf_desc_ptr, 0x100).cast('Q')[20] # offset 0xA0 is a raw gpu pointer.
-      tensor_inputs['input_img'] = Tensor.from_blob(rawbuf_ptr, (buf.height, buf.width), dtype=dtypes.uint8, device='QCOM')[v_offset:v_offset+MODEL_HEIGHT, h_offset:h_offset+MODEL_WIDTH].reshape((1,-1))
+      tensor_inputs['input_img'] = Tensor.from_blob(rawbuf_ptr, (buf.height, buf.width), dtype=dtypes.uint8, device='QCOM')[v_offset:v_offset+MODEL_HEIGHT, h_offset:h_offset+MODEL_WIDTH].reshape((1,-1)).contiguous().realize()
     else:
       buf_data = buf.data.reshape(-1, buf.stride)
       input_data = self.inputs['input_img'].reshape(1, MODEL_HEIGHT, MODEL_WIDTH)
       input_data[:] = buf_data[v_offset:v_offset+MODEL_HEIGHT, h_offset:h_offset+MODEL_WIDTH]
       tensor_inputs['input_img'] = Tensor(input_data).reshape((1,-1))
+
+    t2 = time.time()
     output = self.model_run(**tensor_inputs)['outputs'].numpy().flatten()
 
-    t2 = time.perf_counter()
-    return output, t2 - t1
+    t3 = time.time()
+    print(f'dmodeld: input cast: {(t2 - t1) * 1000}ms, model_run: {(t3 - t2) * 1000}ms ')
+    return output, t3 - t1
 
 
 def fill_driver_state(msg, ds_result: DriverStateResult):
