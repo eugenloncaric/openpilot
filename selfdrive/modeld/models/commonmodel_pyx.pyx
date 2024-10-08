@@ -28,6 +28,9 @@ cdef class CLMem:
   def mem_address(self):
     return <uintptr_t>(self.mem)
 
+def cl_from_visionbuf(VisionBuf buf):
+  return CLMem.create(<void*>buf.buf.buf_cl)
+
 cdef class ModelFrame:
   cdef cppModelFrame * frame
 
