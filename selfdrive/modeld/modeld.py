@@ -129,8 +129,6 @@ class ModelState:
     if prepare_only:
       return None
 
-    for k in tensor_inputs:
-      print(k, tensor_inputs[k].shape)
     self.output = self.model_run(**tensor_inputs)['outputs'].numpy().flatten()
     outputs = self.parser.parse_outputs(self.slice_outputs(self.output))
 
@@ -141,7 +139,7 @@ class ModelState:
     self.prev_desired_curv_20hz[-1] = outputs['desired_curvature'][0, :]
 
     idxs = np.arange(-4,-100,-4)[::-1]
-    self.inputs['features_buffer'][:] = self.full_features_20Hz[idxs].flatten()
+    self.inputs['features_buffer'][:] = self.full_features_20Hz[idxs]
     # TODO model only uses last value now, once that changes we need to input strided action history buffer
     self.inputs['prev_desired_curv'][-ModelConstants.PREV_DESIRED_CURV_LEN:] = 0. * self.prev_desired_curv_20hz[-4, :]
     return outputs
