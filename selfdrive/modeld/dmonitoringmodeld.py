@@ -97,7 +97,7 @@ class ModelState:
     output = self.model_run(**tensor_inputs)['outputs'].numpy().flatten()
 
     t3 = time.perf_counter()
-    print(f'DMONITORMODELD TIMINGS: input to tensor cast: {(t2 - t1) * 1000:.2f}ms, model_run: {(t3 - t2) * 1000:.2}ms ')
+    print(f'DMONITORMODELD TIMINGS: input to tensor cast: {(t2 - t1) * 1000:.2f}ms, model_run: {(t3 - t2) * 1000:.2f}ms ')
     return output, t3 - t1
 
 
