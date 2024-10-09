@@ -3,9 +3,10 @@ import os
 from openpilot.system.hardware import TICI
 ## TODO this is hack
 if TICI:
-  os.environ['QCOM'] = '1'
+  GPU_BACKEND = 'QCOM'
 else:
-  os.environ['GPU'] = '1'
+  GPU_BACKEND = 'GPU'
+os.environ[GPU_BACKEND] = '1'
 import gc
 import math
 import time
@@ -73,6 +74,8 @@ class ModelState:
     assert ctypes.sizeof(DMonitoringModelResult) == OUTPUT_SIZE * ctypes.sizeof(ctypes.c_float)
     self.inputs = {'calib': np.zeros((1, CALIB_LEN), dtype=np.float32)}
     self.img_tensor = None
+    self.tensor_inputs = {k: Tensor.from_blob(mv_address(v), v.shape, dtype=dtypes.float, device='CLANG') for k, v in self.inputs.items()}
+
 
     with open(MODEL_PKL_PATH, "rb") as f:
       self.model_run = pickle.load(f)
@@ -81,9 +84,7 @@ class ModelState:
     self.inputs['calib'][0,:] = calib
 
     t1 = time.perf_counter()
-    tensor_inputs = {'calib': Tensor(self.inputs['calib'])}
-    v_offset = buf.height - MODEL_HEIGHT
-    h_offset = (buf.width - MODEL_WIDTH) // 2
+    tensor_inputs = {k: v.to(GPU_BACKEND) for k,v in self.tensor_inputs.items()}
     if TICI:
       if self.img_tensor is None:
         input_img_cl = cl_from_visionbuf(buf)
