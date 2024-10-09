@@ -71,9 +71,8 @@ class ModelState:
 
   def __init__(self, cl_ctx):
     assert ctypes.sizeof(DMonitoringModelResult) == OUTPUT_SIZE * ctypes.sizeof(ctypes.c_float)
-    self.inputs = {
-      'input_img': np.zeros((1, MODEL_HEIGHT * MODEL_WIDTH), dtype=np.uint8),
-      'calib': np.zeros((1, CALIB_LEN), dtype=np.float32)}
+    self.inputs = {'calib': np.zeros((1, CALIB_LEN), dtype=np.float32)}
+    self.img_tensor = None
 
     with open(MODEL_PKL_PATH, "rb") as f:
       self.model_run = pickle.load(f)
@@ -86,10 +85,12 @@ class ModelState:
     v_offset = buf.height - MODEL_HEIGHT
     h_offset = (buf.width - MODEL_WIDTH) // 2
     if TICI:
-      input_img_cl = cl_from_visionbuf(buf)
-      cl_buf_desc_ptr = to_mv(input_img_cl.mem_address, 8).cast('Q')[0]
-      rawbuf_ptr = to_mv(cl_buf_desc_ptr, 0x100).cast('Q')[20] # offset 0xA0 is a raw gpu pointer.
-      tensor_inputs['input_img'] = Tensor.from_blob(rawbuf_ptr, (1, buf.height * 3 // 2, buf.width), dtype=dtypes.uint8, device='QCOM')
+      if self.img_tensor is None:
+        input_img_cl = cl_from_visionbuf(buf)
+        cl_buf_desc_ptr = to_mv(input_img_cl.mem_address, 8).cast('Q')[0]
+        rawbuf_ptr = to_mv(cl_buf_desc_ptr, 0x100).cast('Q')[20] # offset 0xA0 is a raw gpu pointer.
+        self.img_tensor = Tensor.from_blob(rawbuf_ptr, (1, buf.height * 3 // 2, buf.width), dtype=dtypes.uint8, device='QCOM')
+      tensor_inputs['input_img'] = self.img_tensor
     else:
       tensor_inputs['input_img'] = Tensor(buf.data).reshape((1,buf.height * 3 // 2,buf.width))
 

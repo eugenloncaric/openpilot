@@ -3,9 +3,10 @@ import os
 from openpilot.system.hardware import TICI
 ## TODO this is hack
 if TICI:
-  os.environ['QCOM'] = '1'
+  GPU_BACKEND = 'QCOM'
 else:
-  os.environ['GPU'] = '1'
+  GPU_BACKEND = 'GPU'
+os.environ[GPU_BACKEND] = '1'
 import time
 import pickle
 import numpy as np
@@ -78,6 +79,8 @@ class ModelState:
       'prev_desired_curv': np.zeros((1,(ModelConstants.HISTORY_BUFFER_LEN+1), ModelConstants.PREV_DESIRED_CURV_LEN), dtype=np.float32),
       'features_buffer': np.zeros((1, ModelConstants.HISTORY_BUFFER_LEN,  ModelConstants.FEATURE_LEN), dtype=np.float32),
     }
+    self.tensor_inputs = {k: Tensor.from_blob(mv_address(v), v.shape, dtype=dtypes.float, device='CLANG') for k, v in self.inputs.items()}
+    self.imgs_tensor, self.big_imgs_tensor = None, None
 
     with open(METADATA_PATH, 'rb') as f:
       model_metadata = pickle.load(f)
@@ -113,14 +116,19 @@ class ModelState:
     big_input_imgs_cl = self.wide_frame.prepare(wbuf, transform_wide.flatten())
 
     t0 = time.perf_counter()
-    tensor_inputs = {k: Tensor(v) for k, v in self.inputs.items()}
+    # TODO this cast should be moved to the jit
+    tensor_inputs = {k: v.to(GPU_BACKEND) for k,v in self.tensor_inputs.items()}
     if TICI:
-      cl_buf_desc_ptr = to_mv(input_imgs_cl.mem_address, 8).cast('Q')[0]
-      rawbuf_ptr = to_mv(cl_buf_desc_ptr, 0x100).cast('Q')[20] # offset 0xA0 is a raw gpu pointer.
-      tensor_inputs['input_imgs'] = Tensor.from_blob(rawbuf_ptr, IMG_INPUT_SHAPE, dtype=dtypes.uint8, device='QCOM')
-      cl_buf_desc_ptr = to_mv(big_input_imgs_cl.mem_address, 8).cast('Q')[0]
-      rawbuf_ptr = to_mv(cl_buf_desc_ptr, 0x100).cast('Q')[20] # offset 0xA0 is a raw gpu pointer.
-      tensor_inputs['big_input_imgs'] = Tensor.from_blob(rawbuf_ptr, IMG_INPUT_SHAPE, dtype=dtypes.uint8, device='QCOM')
+      # The imgs tensors are backed by opencl memory, only need init once
+      if self.imgs_tensor is None:
+        cl_buf_desc_ptr = to_mv(input_imgs_cl.mem_address, 8).cast('Q')[0]
+        big_cl_buf_desc_ptr = to_mv(big_input_imgs_cl.mem_address, 8).cast('Q')[0]
+        rawbuf_ptr = to_mv(cl_buf_desc_ptr, 0x100).cast('Q')[20] # offset 0xA0 is a raw gpu pointer.
+        big_rawbuf_ptr = to_mv(big_cl_buf_desc_ptr, 0x100).cast('Q')[20] # offset 0xA0 is a raw gpu pointer.
+        self.imgs_tensor = Tensor.from_blob(rawbuf_ptr, IMG_INPUT_SHAPE, dtype=dtypes.uint8, device='QCOM')
+        self.big_imgs_tensor = Tensor.from_blob(big_rawbuf_ptr, IMG_INPUT_SHAPE, dtype=dtypes.uint8, device='QCOM')
+      tensor_inputs['input_imgs'] = self.imgs_tensor
+      tensor_inputs['big_input_imgs'] = self.big_imgs_tensor
     else:
       tensor_inputs['input_imgs'] = Tensor(self.frame.buffer_from_cl(input_imgs_cl)).reshape(IMG_INPUT_SHAPE)
       tensor_inputs['big_input_imgs'] = Tensor(self.wide_frame.buffer_from_cl(big_input_imgs_cl)).reshape(IMG_INPUT_SHAPE)
